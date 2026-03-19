@@ -13,6 +13,7 @@ from flasgger import Swagger
 from config import Config
 from models import db
 from routes import api
+from commands import register_commands
 
 logger = logging.getLogger(__name__)
 
@@ -28,6 +29,7 @@ def create_app() -> Flask:
     Migrate(app, db)  # registers `flask db` CLI commands; does NOT run any migration
 
     app.register_blueprint(api)
+    register_commands(app)
 
     Swagger(app, config=Config.SWAGGER, template=Config.SWAGGER_TEMPLATE)
 

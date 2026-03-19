@@ -19,5 +19,7 @@ FROM base AS runtime
 EXPOSE 5000
 
 ENV APP_MODE=web
+ENV PYTHONPATH=/app
+ENV FLASK_APP=app:create_app
 
 CMD ["python", "app.py"]

@@ -37,6 +37,7 @@ class Config:
 
     # --- Swagger ------------------------------------------------------------
     SWAGGER: dict = {
+        "title": "Customer Management API",
         "headers": [],
         "specs": [
             {

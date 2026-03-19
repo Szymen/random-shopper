@@ -37,11 +37,13 @@ services:
       - kafka
 
   web:
-    build: .
+    build: ./customer-management
     volumes:
       - /Users/szymon.maslowski/code/random-shopper/customer-management:/app
     environment:
       APP_MODE: web
+      PYTHONPATH: /app
+      FLASK_APP: app:create_app
       SQLALCHEMY_DATABASE_URI: postgresql://customer:customer@db:5432/customer_mgmt
       KAFKA_BOOTSTRAP_SERVERS: kafka:9092
       LOG_LEVEL: INFO
@@ -51,7 +53,7 @@ services:
       - db
 
   consumer:
-    build: .
+    build: ./customer-management
     environment:
       APP_MODE: kafka
       SQLALCHEMY_DATABASE_URI: postgresql://customer:customer@db:5432/customer_mgmt
@@ -59,6 +61,23 @@ services:
       LOG_LEVEL: INFO
     depends_on:
       - db
+      - kafka
+
+  customer-face:
+    build: ./customer-face
+    volumes:
+      - /Users/szymon.maslowski/code/random-shopper/customer-face:/app
+    environment:
+      PYTHONPATH: /app
+      FLASK_APP: app:create_app
+      CUSTOMER_MANAGEMENT_URL: http://web:5000
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      KAFKA_TOPIC: purchases
+      LOG_LEVEL: INFO
+    ports:
+      - "5001:5001"
+    depends_on:
+      - web
       - kafka
 
 volumes:
