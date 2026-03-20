@@ -1,0 +1,123 @@
+version: "3.9"
+
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: customer
+      POSTGRES_PASSWORD: customer
+      POSTGRES_DB: customer_mgmt
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U customer -d customer_mgmt"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+  kafka:
+    image: apache/kafka:4.1.2
+    environment:
+      KAFKA_NODE_ID: "1"
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
+      KAFKA_LISTENERS: PLAINTEXT://:9092,CONTROLLER://:9093
+#      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://localhost:9092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,CONTROLLER:PLAINTEXT
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+      KAFKA_LOG4J_LOGGERS: "kafka.server.DefaultAutoTopicCreationManager=WARN"
+    network: host
+    ports:
+      - "9092:9092"
+    healthcheck:
+      test: /opt/kafka/bin/kafka-topics.sh --bootstrap-server localhost:9092 --list
+      interval: 5s
+      timeout: 10s
+      retries: 10
+      start_period: 15s
+
+  kafka-ui:
+    image: provectuslabs/kafka-ui:latest
+    environment:
+      KAFKA_CLUSTERS_0_NAME: local
+      KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:9092
+      DYNAMIC_CONFIG_ENABLED: "true"
+    ports:
+      - "8080:8080"
+    depends_on:
+      kafka:
+        condition: service_healthy
+
+  customer-management:
+    build: ./customer-management
+    environment:
+      APP_MODE: web
+      PYTHONPATH: /app
+      FLASK_APP: app:create_app
+      SQLALCHEMY_DATABASE_URI: postgresql://customer:customer@db:5432/customer_mgmt
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      LOG_LEVEL: INFO
+    ports:
+      - "5000:5000"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:5000/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+    depends_on:
+      db:
+        condition: service_healthy
+
+  purchases-kafka-consumer:
+    build: ./customer-management
+    command: ["python", "app.py"]
+    environment:
+      APP_MODE: kafka
+      SQLALCHEMY_DATABASE_URI: postgresql://customer:customer@db:5432/customer_mgmt
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      LOG_LEVEL: DEBUG
+    healthcheck:
+      test: ["CMD-SHELL", "pgrep -f 'python app.py' || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+#    depends_on:
+#      db:
+#        condition: service_healthy
+#      kafka:
+#        condition: service_healthy
+#      customer-face:
+#        condition: service_healthy
+
+  customer-face:
+    build: ./customer-face
+    environment:
+      PYTHONPATH: /app
+      FLASK_APP: app:create_app
+      CUSTOMER_MANAGEMENT_URL: http://customer-management:5000
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      KAFKA_TOPIC: purchases
+      LOG_LEVEL: INFO
+    ports:
+      - "5001:5001"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:5001/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+    depends_on:
+      customer-management:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+
+volumes:
+  pgdata:
