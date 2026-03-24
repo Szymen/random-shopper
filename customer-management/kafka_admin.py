@@ -31,7 +31,6 @@ def ensure_topic(topic: str) -> None:
             future.result()
             logger.info("Kafka topic '%s' created successfully.", t)
         except KafkaException as exc:
-            # TOPIC_ALREADY_EXISTS is fine (race condition) – anything else is not
             if "TOPIC_ALREADY_EXISTS" in str(exc):
                 logger.info("Kafka topic '%s' already exists (race).", t)
             else:

@@ -1,12 +1,11 @@
 import json
 import logging
 import signal
-import sys
 from datetime import datetime, timezone
 
 from confluent_kafka import Consumer, KafkaError, KafkaException
 
-from models import Purchase, db
+from models import Purchase, User, db
 
 logger = logging.getLogger(__name__)
 
@@ -34,8 +33,15 @@ def start_consumer(app):
     }
 
     consumer = Consumer(consumer_conf)
-    consumer.subscribe([Config.KAFKA_TOPIC])
+
+    topics = consumer.list_topics().topics
+    logger.info("Available topics: %s", list(topics.keys()))
+
+    # consumer.subscribe([Config.KAFKA_TOPIC])
+    consumer.subscribe(["purchases"])
+
     logger.info(
+
         "Kafka consumer started – topic=%s servers=%s group=%s",
         Config.KAFKA_TOPIC,
         Config.KAFKA_BOOTSTRAP_SERVERS,
@@ -45,17 +51,26 @@ def start_consumer(app):
     try:
         with app.app_context():
             while _running:
-                msg = consumer.poll(timeout=Config.KAFKA_POLL_TIMEOUT)
+                logging.debug("Kafka consumer waiting for messages")
+                # msg = consumer.poll(timeout=Config.KAFKA_POLL_TIMEOUT)\
+                msg = consumer.poll(timeout=2.0)
+
+                logging.debug(f"msg:>{msg}<")
                 if msg is None:
                     continue
 
                 if msg.error():
+                    logger.error("Kafka consumer error: %s", msg.error())
+
                     if msg.error().code() == KafkaError._PARTITION_EOF:
                         logger.debug("Reached end of partition %s[%d]", msg.topic(), msg.partition())
                         continue
                     raise KafkaException(msg.error())
+                else:
+                    logger.debug("everything ok")
 
                 _process_message(msg)
+                logger.debug("Kafka consumer loop end")
     finally:
         consumer.close()
         logger.info("Kafka consumer closed.")
@@ -67,20 +82,35 @@ def _process_message(msg):
         payload = json.loads(msg.value().decode("utf-8"))
         logger.debug("Raw Kafka message: %s", payload)
 
-        purchase = Purchase(
-            username=payload["username"],
-            userid=str(payload["userid"]),
-            price=float(payload["price"]),
-            timestamp=datetime.fromtimestamp(payload["timestamp"], tz=timezone.utc)
-            if "timestamp" in payload
-            else datetime.now(timezone.utc),
-        )
+        userid = str(payload["userid"])
+        username = payload["username"]
 
+        user = User.query.filter_by(userid=userid).first()
+        if not user:
+            from models import Role
+            user = User(userid=userid, username=username, role=Role.customer)
+            db.session.add(user)
+            db.session.flush()
+            logger.info("Created new user from Kafka message: userid=%s username=%s", userid, username)
+
+        timestamp = payload.get("timestamp")
+        if timestamp:
+            if isinstance(timestamp, (int, float)):
+                dt = datetime.fromtimestamp(timestamp, tz=timezone.utc)
+            else:
+                dt = datetime.fromisoformat(str(timestamp).replace("Z", "+00:00"))
+        else:
+            dt = datetime.now(timezone.utc)
+
+        purchase = Purchase(user=user, price=float(payload["price"]), timestamp=dt)
         db.session.add(purchase)
         db.session.commit()
 
-        logger.info("Persisted purchase: %s", purchase)
+        logger.info(
+            "Persisted purchase: userid=%s username=%s price=%s timestamp=%s",
+            userid, username, payload["price"], dt,
+        )
 
     except (json.JSONDecodeError, KeyError, ValueError) as exc:
-        logger.error("Failed to process Kafka message: %s – %s", exc, msg.value())
-
+        logger.error("Failed to process Kafka message: %s – raw: %s", exc, msg.value())
+        db.session.rollback()

@@ -1,0 +1,96 @@
+name: CI
+
+on:
+  push:
+    branches: ["**"]
+    tags: ["v*"]
+  pull_request:
+
+permissions:
+  contents: read
+
+env:
+  PYTHON_VERSION: "3.12"
+
+jobs:
+  test:
+    name: test (${{ matrix.service }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        service:
+          - customer-face
+          - customer-management
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+          cache-dependency-path: |
+            ${{ matrix.service }}/requirements.txt
+
+      - name: Install dependencies
+        working-directory: ${{ matrix.service }}
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Run tests
+        working-directory: ${{ matrix.service }}
+        run: |
+          pytest -q
+
+  docker:
+    name: build & push docker images
+    runs-on: ubuntu-latest
+    needs: [test]
+    # Push only from main or from version tags; always build is still done in PRs by the test job.
+    if: ${{ github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v') }}
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - service: customer-face
+            image_suffix: random-shopper-customer-face
+            context: ./customer-face
+            dockerfile: ./customer-face/Dockerfile
+          - service: customer-management
+            image_suffix: random-shopper-customer-management
+            context: ./customer-management
+            dockerfile: ./customer-management/Dockerfile
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Build & push
+        uses: docker/build-push-action@v6
+        with:
+          context: ${{ matrix.context }}
+          file: ${{ matrix.dockerfile }}
+          push: true
+          tags: |
+            ${{ secrets.DOCKERHUB_USERNAME }}/${{ matrix.image_suffix }}:sha-${{ github.sha }}
+            ${{ secrets.DOCKERHUB_USERNAME }}/${{ matrix.image_suffix }}:${{ startsWith(github.ref, 'refs/tags/v') && github.ref_name || 'latest' }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+

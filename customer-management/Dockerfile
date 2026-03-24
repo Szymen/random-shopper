@@ -22,4 +22,7 @@ ENV APP_MODE=web
 ENV PYTHONPATH=/app
 ENV FLASK_APP=app:create_app
 
+RUN chmod +x /app/entrypoint.sh
+ENTRYPOINT ["/app/entrypoint.sh"]
+
 CMD ["python", "app.py"]

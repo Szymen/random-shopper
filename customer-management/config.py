@@ -30,10 +30,10 @@ class Config:
 
     # --- Kafka --------------------------------------------------------------
     KAFKA_BOOTSTRAP_SERVERS: str = os.environ.get("KAFKA_BOOTSTRAP_SERVERS", "localhost:9092")
-    KAFKA_GROUP_ID: str = os.environ.get("KAFKA_GROUP_ID", "customer-management-group")
-    KAFKA_TOPIC: str = os.environ.get("KAFKA_TOPIC", "purchases")
-    KAFKA_AUTO_OFFSET_RESET: str = os.environ.get("KAFKA_AUTO_OFFSET_RESET", "earliest")
-    KAFKA_POLL_TIMEOUT: float = float(os.environ.get("KAFKA_POLL_TIMEOUT", "1.0"))
+    KAFKA_GROUP_ID = os.environ.get("KAFKA_GROUP_ID", "purchases-consumers")
+    KAFKA_TOPIC = os.environ.get("KAFKA_TOPIC", "purchases")
+    KAFKA_AUTO_OFFSET_RESET = os.environ.get("KAFKA_AUTO_OFFSET_RESET", "latest")
+    KAFKA_POLL_TIMEOUT = float(os.environ.get("KAFKA_POLL_TIMEOUT", "1.0"))
 
     # --- Swagger ------------------------------------------------------------
     SWAGGER: dict = {
