@@ -11,6 +11,8 @@ permissions:
 
 env:
   PYTHON_VERSION: "3.12"
+  # Defined as a GitHub Actions Variable (Settings → Variables).
+  DOCKERHUB_USERNAME: ${{ vars.DOCKERHUB_USERNAME }}
 
 jobs:
   test:
@@ -26,15 +28,6 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-
-      - name: Compute image tags
-        id: tags
-        shell: bash
-        run: |
-          # Sortable build tag to quickly spot newer/older builds.
-          # Example: 20260324-153012Z-123
-          ts=$(date -u +"%Y%m%d-%H%M%SZ")
-          echo "order_tag=${ts}-${GITHUB_RUN_NUMBER}" >> "$GITHUB_OUTPUT"
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -79,6 +72,15 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Compute image tags
+        id: tags
+        shell: bash
+        run: |
+          # Sortable build tag to quickly spot newer/older builds.
+          # Example: 20260324-153012Z-123
+          ts=$(date -u +"%Y%m%d-%H%M%SZ")
+          echo "order_tag=${ts}-${GITHUB_RUN_NUMBER}" >> "$GITHUB_OUTPUT"
+
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
 
@@ -88,7 +90,7 @@ jobs:
       - name: Log in to Docker Hub
         uses: docker/login-action@v3
         with:
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          username: ${{ env.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
       - name: Build & push
@@ -97,7 +99,7 @@ jobs:
           context: ${{ matrix.context }}
           file: ${{ matrix.dockerfile }}
           push: true
-          tags: ${{ secrets.DOCKERHUB_USERNAME }}/${{ matrix.image_suffix }}:${{ steps.tags.outputs.order_tag }},${{ secrets.DOCKERHUB_USERNAME }}/${{ matrix.image_suffix }}:sha-${{ github.sha }},${{ secrets.DOCKERHUB_USERNAME }}/${{ matrix.image_suffix }}:${{ startsWith(github.ref, 'refs/tags/v') && github.ref_name || 'latest' }}
+          tags: ${{ env.DOCKERHUB_USERNAME }}/${{ matrix.image_suffix }}:${{ steps.tags.outputs.order_tag }},${{ env.DOCKERHUB_USERNAME }}/${{ matrix.image_suffix }}:sha-${{ github.sha }},${{ env.DOCKERHUB_USERNAME }}/${{ matrix.image_suffix }}:${{ startsWith(github.ref, 'refs/tags/v') && github.ref_name || 'latest' }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
