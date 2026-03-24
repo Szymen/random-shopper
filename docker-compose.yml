@@ -102,7 +102,7 @@ services:
     environment:
       PYTHONPATH: /app
       FLASK_APP: app:create_app
-      CUSTOMER_MANAGEMENT_URL: http://customer-management:5000
+      CUSTOMER_MANAGEMENT_URL: http://customer-management-api:5000
       KAFKA_BOOTSTRAP_SERVERS: broker:9092
       KAFKA_TOPIC: purchases
       LOG_LEVEL: INFO
