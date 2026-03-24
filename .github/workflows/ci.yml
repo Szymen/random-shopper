@@ -27,6 +27,15 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Compute image tags
+        id: tags
+        shell: bash
+        run: |
+          # Sortable build tag to quickly spot newer/older builds.
+          # Example: 20260324-153012Z-123
+          ts=$(date -u +"%Y%m%d-%H%M%SZ")
+          echo "order_tag=${ts}-${GITHUB_RUN_NUMBER}" >> "$GITHUB_OUTPUT"
+
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
@@ -89,6 +98,7 @@ jobs:
           file: ${{ matrix.dockerfile }}
           push: true
           tags: |
+            ${{ secrets.DOCKERHUB_USERNAME }}/${{ matrix.image_suffix }}:${{ steps.tags.outputs.order_tag }}
             ${{ secrets.DOCKERHUB_USERNAME }}/${{ matrix.image_suffix }}:sha-${{ github.sha }}
             ${{ secrets.DOCKERHUB_USERNAME }}/${{ matrix.image_suffix }}:${{ startsWith(github.ref, 'refs/tags/v') && github.ref_name || 'latest' }}
           cache-from: type=gha
