@@ -98,6 +98,7 @@ jobs:
         with:
           context: ${{ matrix.context }}
           file: ${{ matrix.dockerfile }}
+          platforms: linux/amd64,linux/arm64
           push: true
           tags: ${{ env.DOCKERHUB_USERNAME }}/${{ matrix.image_suffix }}:${{ steps.tags.outputs.order_tag }},${{ env.DOCKERHUB_USERNAME }}/${{ matrix.image_suffix }}:sha-${{ github.sha }},${{ env.DOCKERHUB_USERNAME }}/${{ matrix.image_suffix }}:${{ startsWith(github.ref, 'refs/tags/v') && github.ref_name || 'latest' }}
           cache-from: type=gha
