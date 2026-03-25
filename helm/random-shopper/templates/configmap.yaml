@@ -1,6 +1,7 @@
 {{- range $sub_service_name, $sub_service_values := $.Values.service_list }}
 
 {{- if $sub_service_values.config_map }}
+---
 apiVersion: v1
 kind: ConfigMap
 metadata:

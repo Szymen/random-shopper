@@ -57,7 +57,9 @@ spec:
             matchLabels:
               app_name: "{{ $.Values.app.name }}-{{ $sub_service_name }}"
       securityContext:
-        {}
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
       serviceAccountName: {{ $.Values.app.name }}-serviceaccount
       containers:
         - name: {{ $.Values.app.name }}-{{ $sub_service_name }}-pod
@@ -72,10 +74,14 @@ spec:
           imagePullPolicy: Always
           terminationMessagePolicy: "FallbackToLogsOnError"
           envFrom:
+            {{- if $sub_service_values.config_map }}
             - configMapRef:
                 name: {{ $sub_service_name }}-configmap
+            {{- end }}
+            {{- if $sub_service_values.secrets }}
             - secretRef:
                 name: {{ $sub_service_name }}-secret
+            {{- end }}
           {{- range tuple "startupProbe" "readinessProbe" "livenessProbe" }}
           {{- if hasKey $sub_service_values . }}
           {{- $probe := (get $sub_service_values . ) | default dict }}

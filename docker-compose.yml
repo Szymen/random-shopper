@@ -56,6 +56,7 @@ services:
 
   customer-management-api:
     build: ./customer-management
+    user: "10001:10001"
     environment:
       APP_MODE: web
       PYTHONPATH: /app
@@ -77,6 +78,7 @@ services:
 
   purchases-kafka-consumer:
     build: ./customer-management
+    user: "10001:10001"
     command: ["python", "app.py"]
     environment:
       APP_MODE: kafka
@@ -99,6 +101,7 @@ services:
 
   customer-face:
     build: ./customer-face
+    user: "10001:10001"
     environment:
       PYTHONPATH: /app
       FLASK_APP: app:create_app
@@ -122,6 +125,7 @@ services:
 
   sandbox:
     build: ./customer-face
+    user: "10001:10001"
     entrypoint: ["sleep", "infinity"]
 
 
