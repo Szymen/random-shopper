@@ -1,0 +1,216 @@
+{{- range $sub_service_name, $sub_service_values := $.Values.service_list }}
+{{ if $sub_service_values.port }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $.Values.app.name }}-{{ $sub_service_name }}-service
+  namespace: {{ $.Values.namespace_name }}
+  labels:
+    app_name: {{ $.Values.app.name }}-{{ $sub_service_name }}
+    chart_name: {{ $.Chart.Name }}
+    chart_version: {{ $.Chart.Version }} 
+spec:
+  type: ClusterIP
+  ports:
+    - name: {{ $.Values.app.name }}-{{ $sub_service_name }}-port
+      port: {{ $sub_service_values.port | default 80 }}
+      targetPort: {{ $sub_service_values.port }}
+      protocol: TCP
+  selector:
+    app_name: {{ $.Values.app.name }}-{{ $sub_service_name }}
+{{- end }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $.Values.app.name }}-{{ $sub_service_name }}
+  namespace: {{ $.Values.namespace_name }}
+  labels:
+    app_name: {{ $.Values.app.name }}-{{ $sub_service_name }}
+    chart_name: {{ $.Chart.Name }}
+    chart_version: {{ $.Chart.Version }} 
+spec:
+  {{- if not (and $sub_service_values.autoscaling $sub_service_values.autoscaling.enabled) }}
+  replicas: {{ $sub_service_values.replicas | default 1 }}
+  {{- end }}
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 1
+      maxSurge: 1
+  selector:
+    matchLabels:
+      app_name: {{ $.Values.app.name }}-{{ $sub_service_name }}
+  template:
+    metadata:
+      labels:
+        app_name: {{ $.Values.app.name }}-{{ $sub_service_name }}
+        chart_name: {{ $.Chart.Name }}
+        chart_version: {{ $.Chart.Version }}
+    spec:
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: "kubernetes.io/hostname"
+          whenUnsatisfiable: "DoNotSchedule"
+          labelSelector:
+            matchLabels:
+              app_name: "{{ $.Values.app.name }}-{{ $sub_service_name }}"
+      securityContext:
+        {}
+      serviceAccountName: {{ $.Values.app.name }}-serviceaccount
+      containers:
+        - name: {{ $.Values.app.name }}-{{ $sub_service_name }}-pod
+          {{- if $sub_service_values.cmd }}
+          command: ["/bin/sh"]
+          args: ["-c", {{ $sub_service_values.cmd | quote }} ]
+          {{- end }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            runAsNonRoot:  true
+          image: "{{ $.Values.app.repository }}/{{ $sub_service_values.image }}:{{  $sub_service_values.version }}"
+          imagePullPolicy: Always
+          terminationMessagePolicy: "FallbackToLogsOnError"
+          envFrom:
+            - configMapRef:
+                name: {{ $sub_service_name }}-configmap
+            - secretRef:
+                name: {{ $sub_service_name }}-secret
+          {{- range tuple "startupProbe" "readinessProbe" "livenessProbe" }}
+          {{- if hasKey $sub_service_values . }}
+          {{- $probe := (get $sub_service_values . ) | default dict }}
+          {{ . }}:
+            {{- if hasKey $probe "httpGet" }}
+            {{- $httpGet := $probe.httpGet | default dict }}
+            httpGet:
+              path: {{ $httpGet.path | default "/" }}
+              port: {{ $httpGet.port | default $sub_service_values.service.destPort | default 80 }}
+            {{- else if $probe.cmd }}
+            exec:
+               command:
+                - /bin/sh
+                - -c
+                - {{ tpl $probe.cmd $ }}
+            {{- else if hasKey $probe "grpc" }}
+            {{- $grpc := $probe.grpc | default dict }}
+            grpc:
+              port: {{ $grpc.port | default $.Values.app.published_port }}
+            {{- else }}
+            tcpSocket:
+              port: {{ if and $probe.tcpSocket $probe.tcpSocket.port }}{{ $probe.tcpSocket.port }}{{ else }}{{ $sub_service_values.service.destPort | default 80 }}{{ end }}
+            {{- end }} {{/* if probe type */}}
+            initialDelaySeconds: {{ $probe.initialDelaySeconds | default 0 }}
+            periodSeconds: {{ $probe.periodSeconds | default 5 }}
+            timeoutSeconds: {{ $probe.timeoutSeconds | default 2 }}
+            successThreshold: {{ $probe.successThreshold | default 1 }}
+            failureThreshold: {{ $probe.failureThreshold | default 10 }}
+          {{- end }} {{/* if has probe */}}
+          {{- end }} {{/* range tuple */}}
+
+          resources:
+            limits:
+            {{- if and ( $sub_service_values.resources) ($sub_service_values.resources.limits) }}
+              cpu: {{ $sub_service_values.resources.limits.cpu | default "2.0" | quote }}
+              memory: {{ $sub_service_values.resources.limits.memory | default "2Gi" | quote }}
+            {{- else }}
+              cpu: "2.0"
+              memory: "2Gi"
+            {{- end }}
+            requests:
+            {{- if and $sub_service_values.resources $sub_service_values.resources.requests }}
+              cpu: "{{ $sub_service_values.resources.requests.cpu | default 0.5 }}"
+              memory: "{{ $sub_service_values.resources.requests.memory | default "500Mi" }}"
+            {{ else }}
+              cpu: "0.5"
+              memory: "500Mi"
+            {{- end }}
+    {{- if and $.Values.app.volumes $.Values.app.volumes.volumeMounts }}
+          volumeMounts:
+             {{- range $volume := $.Values.app.volumes.volumeMounts }}
+               {{- $pvcName := printf "%s-%s" $.Values.app.name $volume.name }}
+               {{- if not (has $pvcName $sub_service_values.excludeMountVolume) }}
+            - name: {{ $volume.name }}
+              mountPath: {{ $volume.mountPath }}
+              {{- if and (eq $volume.type "persistentVolumeClaim") $volume.pvc.readOnly }}
+              readOnly: {{ $volume.pvc.readOnly| default false  }}
+              {{- end }}
+              {{- end }}
+             {{- end }} {{/* range */}}
+
+      volumes:
+      {{- range $volume := $.Values.app.volumes.volumeMounts }}
+       {{- $pvcName := printf "%s-%s" $.Values.app.name $volume.name }}
+       {{- if not (has $pvcName $sub_service_values.excludeMountVolume) }}
+        - name: {{ $volume.name }}
+          {{- if or $volume.memory ( eq $volume.type "emptyDir" ) }}
+          emptyDir:
+            medium: Memory
+            sizeLimit: {{ $volume.sizeLimit | default "10Mi" }}
+          {{- else if eq $volume.type "persistentVolumeClaim" }}
+          persistentVolumeClaim:
+           {{- if $volume.pvc.claimName }}
+            claimName: {{$volume.pvc.claimName }}
+            {{- else }}
+            claimName: {{ $.Values.app.name }}-{{ $volume.name }}
+            {{- end }}
+            {{- if $volume.readOnly }}  
+            readOnly: {{ $volume.readOnly }}
+            {{- end }}  
+          {{- else if eq $volume.type "configMap" }}
+          configMap:
+            name: {{ $volume.configMapSource }}
+            {{- if $volume.items }}
+            items:
+            {{- range $cm_item := $volume.items }}
+              - key: {{ $cm_item.key }}
+                path: {{ $cm_item.path }}
+            {{- end }}
+            {{- end }}
+          {{- else }}
+          hostPath:
+            path: {{ $volume.hostPath }}
+          {{- end }}
+        {{- end }}
+        {{- end }} {{/* range */}}
+      {{- end }} {{/* if volumes present */}}
+
+{{- if and $sub_service_values.autoscaling $sub_service_values.autoscaling.enabled }}
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: {{ $.Values.app.name }}-{{ $sub_service_name }}-hpa
+  namespace: {{ $.Values.namespace_name }}
+  labels:
+    app_name: {{ $.Values.app.name }}-{{ $sub_service_name }}
+    chart_name: {{ $.Chart.name }}
+    chart_version: {{ $.Chart.Version }} 
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: {{ $.Values.app.name }}-{{ $sub_service_name }}
+  minReplicas: {{ $sub_service_values.autoscaling.minReplicas }}
+  maxReplicas: {{ $sub_service_values.autoscaling.maxReplicas }}
+  {{- if or $sub_service_values.autoscaling.targetCPUUtilizationPercentage $sub_service_values.autoscaling.targetMemoryUtilizationPercentage }}
+  metrics:
+    {{- if $sub_service_values.autoscaling.targetCPUUtilizationPercentage }}
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: {{ $sub_service_values.autoscaling.targetCPUUtilizationPercentage }}
+    {{- end }}
+    {{- if $sub_service_values.autoscaling.targetMemoryUtilizationPercentage }}
+    - type: Resource
+      resource:
+        name: memory
+        target:
+          type: Utilization
+          averageUtilization: {{ $sub_service_values.autoscaling.targetMemoryUtilizationPercentage }}
+    {{- end }}
+  {{- end }}
+{{- end }}
+
+{{- end }} {{/* for sub_svc */}}

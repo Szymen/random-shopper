@@ -1,0 +1,19 @@
+{{- range $sub_service_name, $sub_service_values := $.Values.service_list }}
+
+{{- if $sub_service_values.config_map }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ $sub_service_name }}-configmap
+  namespace: {{ $.Values.namespace_name }}
+  labels:
+    app_name: {{ $sub_service_values.name }}
+    chart_name: {{ $.Chart.Name }}
+data:
+  {{- $sortedKeys := keys $sub_service_values.config_map | sortAlpha -}}
+  {{- range $key := $sortedKeys }}
+  {{ $key | upper | replace "." "_" }}: {{ (tpl ((get $sub_service_values.config_map $key) | toString) $) | quote }}
+  {{- end -}}
+{{- end }}
+
+{{- end }} {{/* for sub_svc */}}
