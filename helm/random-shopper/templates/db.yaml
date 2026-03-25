@@ -1,0 +1,75 @@
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: db
+  namespace: {{ .Values.namespace_name }}
+  labels:
+    app.kubernetes.io/component: "db"
+spec:
+  containers:
+    - name: postgres
+      image: {{ default "postgres:16-alpine" .Values.db.image | quote }}
+      imagePullPolicy: {{ default "IfNotPresent" .Values.db.imagePullPolicy }}
+      ports:
+        - name: postgres
+          containerPort: 5432
+          protocol: TCP
+      {{- if (dig "persistence" "enabled" false .Values.db) }}
+      volumeMounts:
+        - name: db-data
+          mountPath: {{ default "/var/lib/postgresql/data" .Values.db.persistence.mountPath | quote }}
+      {{- end }}
+      env:
+        - name: POSTGRES_USER
+          value: {{ default "customer" .Values.db.postgresUser | quote }}
+        - name: POSTGRES_PASSWORD
+          value: {{ default "customer" .Values.db.postgresPassword | quote }}
+        - name: POSTGRES_DB
+          value: {{ default "customer_mgmt" .Values.db.postgresDb | quote }}
+      livenessProbe:
+        exec:
+          command:
+            - /bin/sh
+            - -c
+            - pg_isready -U "$POSTGRES_USER" -d "$POSTGRES_DB"
+        initialDelaySeconds: 10
+        periodSeconds: 5
+        timeoutSeconds: 5
+        failureThreshold: 10
+
+      readinessProbe:
+        exec:
+          command:
+            - /bin/sh
+            - -c
+            - pg_isready -U "$POSTGRES_USER" -d "$POSTGRES_DB"
+        initialDelaySeconds: 10
+        periodSeconds: 5
+        timeoutSeconds: 5
+        failureThreshold: 10
+
+  {{- if (dig "persistence" "enabled" false .Values.db) }}
+  volumes:
+    - name: db-data
+      persistentVolumeClaim:
+        claimName: {{ default "db-data" .Values.db.persistence.existingClaim | quote }}
+  {{- end }}
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: db
+  namespace: {{ .Values.namespace_name }}
+  labels:
+    app.kubernetes.io/component: "db"
+spec:
+  type: ClusterIP
+  ports:
+    - name: postgres
+      port: 5432
+      targetPort: postgres
+      protocol: TCP
+  selector:
+    app.kubernetes.io/component: "db"

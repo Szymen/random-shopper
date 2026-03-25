@@ -1,0 +1,7 @@
+apiVersion: v2
+name: random-shopper
+description: Helm chart for the random-shopper microservices stack
+type: application
+version: 0.1.0
+appVersion: "1.0.0"
+

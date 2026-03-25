@@ -1,0 +1,156 @@
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: kafka-broker
+  namespace: {{ .Values.namespace_name }}
+  labels:
+    app.kubernetes.io/component: "broker"
+spec:
+  containers:
+    - name: broker
+      image: {{ default "apache/kafka:4.1.2" .Values.kafka.image | quote }}
+      imagePullPolicy: {{ default "IfNotPresent" .Values.kafka.imagePullPolicy }}
+      ports:
+        - name: kafka
+          containerPort: 9092
+          protocol: TCP
+        - name: controller
+          containerPort: 9093
+          protocol: TCP
+      {{- if (dig "persistence" "enabled" false .Values.kafka) }}
+      volumeMounts:
+        - name: kafka-data
+          mountPath: {{ default "/var/lib/kafka/data" .Values.kafka.persistence.mountPath | quote }}
+      {{- end }}
+      env:
+        - name: KAFKA_NODE_ID
+          value: "1"
+        - name: KAFKA_PROCESS_ROLES
+          value: "broker,controller"
+        - name: KAFKA_LISTENERS
+          value: "PLAINTEXT://broker:9092,CONTROLLER://localhost:9093"
+        - name: KAFKA_ADVERTISED_LISTENERS
+          value: "PLAINTEXT://broker:9092"
+        - name: KAFKA_CONTROLLER_LISTENER_NAMES
+          value: "CONTROLLER"
+        - name: KAFKA_LISTENER_SECURITY_PROTOCOL_MAP
+          value: "CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT"
+        - name: KAFKA_CONTROLLER_QUORUM_VOTERS
+          value: "1@localhost:9093"
+        - name: KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR
+          value: "1"
+        - name: KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR
+          value: "1"
+        - name: KAFKA_TRANSACTION_STATE_LOG_MIN_ISR
+          value: "1"
+        - name: KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS
+          value: "0"
+        - name: KAFKA_NUM_PARTITIONS
+          value: "1"
+      readinessProbe:
+        exec:
+          command:
+            - /bin/sh
+            - -c
+            - /opt/kafka/bin/kafka-topics.sh --bootstrap-server broker:9092 --list
+        initialDelaySeconds: 15
+        periodSeconds: 5
+        timeoutSeconds: 10
+        failureThreshold: 10
+      livenessProbe:
+        exec:
+          command:
+            - /bin/sh
+            - -c
+            - /opt/kafka/bin/kafka-topics.sh --bootstrap-server broker:9092 --list
+        initialDelaySeconds: 15
+        periodSeconds: 5
+        timeoutSeconds: 10
+        failureThreshold: 10
+
+  {{- if (dig "persistence" "enabled" false .Values.kafka) }}
+  volumes:
+    - name: kafka-data
+      persistentVolumeClaim:
+        claimName: {{ default "kafka-data" .Values.kafka.persistence.existingClaim | quote }}
+  {{- end }}
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: broker
+  namespace: {{ .Values.namespace_name }}
+  labels:
+    app.kubernetes.io/component: "broker"
+spec:
+  type: ClusterIP
+  ports:
+    - name: kafka
+      port: 9092
+      targetPort: kafka
+      protocol: TCP
+  selector:
+    app.kubernetes.io/component: "broker"
+
+{{- if (default true .Values.kafkaUi.enabled) }}
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: kafka-ui
+  namespace: {{ .Values.namespace_name }}
+  labels:
+    app.kubernetes.io/component: "kafka-ui"
+spec:
+  containers:
+    - name: kafka-ui
+      image: {{ default "provectuslabs/kafka-ui:latest" .Values.kafkaUi.image | quote }}
+      imagePullPolicy: {{ default "IfNotPresent" .Values.kafkaUi.imagePullPolicy }}
+      ports:
+        - name: http
+          containerPort: 8080
+          protocol: TCP
+      env:
+        - name: KAFKA_CLUSTERS_0_NAME
+          value: "local"
+        - name: KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS
+          value: "broker:9092"
+        - name: DYNAMIC_CONFIG_ENABLED
+          value: "true"
+      readinessProbe:
+        httpGet:
+          path: /
+          port: http
+        initialDelaySeconds: 10
+        periodSeconds: 10
+        timeoutSeconds: 5
+        failureThreshold: 10
+      livenessProbe:
+        httpGet:
+          path: /
+          port: http
+        initialDelaySeconds: 10
+        periodSeconds: 10
+        timeoutSeconds: 5
+        failureThreshold: 10
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: kafka-ui
+  namespace: {{ .Values.namespace_name }}
+  labels:
+    app.kubernetes.io/component: "kafka-ui"
+spec:
+  type: ClusterIP
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http
+      protocol: TCP
+  selector:
+    app.kubernetes.io/component: "kafka-ui"
+{{- end }}
