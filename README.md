@@ -93,6 +93,10 @@ Prerequisites:
 
 * A running Kubernetes cluster (for example Docker Desktop Kubernetes, Minikube, or Kind)
 * `helm` and `kubectl` installed locally
+* (optional) have metrics-server installed in the cluster  - f.e. 
+```bash 
+minikube addons enable metrics-server
+* ```
 
 From the repo root:
 
