@@ -109,7 +109,7 @@ kubectl -n random-shopper-namespace rollout status deploy/random-shopper-custome
 kubectl -n random-shopper-namespace rollout status deploy/random-shopper-customer-management-api
 kubectl -n random-shopper-namespace rollout status deploy/random-shopper-purchases-kafka-consumer
 ```
-
+----
 Port-forward APIs for local checks:
 
 ```bash
@@ -118,24 +118,27 @@ kubectl -n random-shopper-namespace port-forward svc/random-shopper-customer-man
 ```bash
 kubectl -n random-shopper-namespace port-forward svc/random-shopper-customer-face-service 5001:5001
 ```
-
+---
 In a second terminal:
 
 ```bash
 curl -s http://localhost:5001/health
 curl -s http://localhost:5000/health
 ```
-
+---
 See Swagger UIs (interactive console):
 
 * Customer Face Swagger: http://localhost:5001/
 * Customer Management Swagger: http://localhost:5000/
-
+---
 Access Kafka UI locally:
 
 ```bash
 kubectl -n random-shopper-namespace port-forward svc/kafka-ui 8080:8080
 ```
+Access it at http://localhost:8080/ 
+
+---
 
 Mass generate purchases:
 

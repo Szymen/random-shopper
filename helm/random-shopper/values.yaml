@@ -42,6 +42,7 @@ service_list:
       SQLALCHEMY_DATABASE_URI: postgresql://customer:customer@db:5432/customer_mgmt
       KAFKA_BOOTSTRAP_SERVERS: broker:9092
       LOG_LEVEL: INFO
+      CUSTOMER_MANAGEMENT_URL: http://customer-management-api:5000
 
 db:
   enabled: true
