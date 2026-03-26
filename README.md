@@ -85,6 +85,74 @@ curl -s http://localhost:5000/health
 
 ---
 
+## Test on Kubernetes (Helm template + kubectl)
+
+This repo includes a Helm chart in `helm/random-shopper/`. The flow below renders manifests first, then applies them with `kubectl`.
+
+Prerequisites:
+
+* A running Kubernetes cluster (for example Docker Desktop Kubernetes, Minikube, or Kind)
+* `helm` and `kubectl` installed locally
+
+From the repo root:
+
+```bash
+helm template random-shopper ./helm/random-shopper  > ./helm/random-shopper-rendered.yaml
+kubectl apply -f ./helm/random-shopper-rendered.yaml
+```
+
+Check resources:
+
+```bash
+kubectl -n random-shopper-namespace get pods,svc
+kubectl -n random-shopper-namespace rollout status deploy/random-shopper-customer-face
+kubectl -n random-shopper-namespace rollout status deploy/random-shopper-customer-management-api
+kubectl -n random-shopper-namespace rollout status deploy/random-shopper-purchases-kafka-consumer
+```
+
+Port-forward APIs for local checks:
+
+```bash
+kubectl -n random-shopper-namespace port-forward svc/random-shopper-customer-management-api-service 5000:5000
+```
+```bash
+kubectl -n random-shopper-namespace port-forward svc/random-shopper-customer-face-service 5001:5001
+```
+
+In a second terminal:
+
+```bash
+curl -s http://localhost:5001/health
+curl -s http://localhost:5000/health
+```
+
+See Swagger UIs (interactive console):
+
+* Customer Face Swagger: http://localhost:5001/
+* Customer Management Swagger: http://localhost:5000/
+
+Access Kafka UI locally:
+
+```bash
+kubectl -n random-shopper-namespace port-forward svc/kafka-ui 8080:8080
+```
+
+Mass generate purchases:
+
+```bash
+kubectl -n random-shopper-namespace exec -it deploy/random-shopper-customer-face -- flask generate-purchases
+```
+
+
+Cleanup:
+
+```bash
+kubectl delete -f ./helm/random-shopper-rendered.yaml
+rm -f ./helm/random-shopper-rendered.yaml
+```
+
+---
+
 ## APIs
 
 ### Customer Face (`customer-face`, port 5001)
