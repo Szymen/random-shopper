@@ -189,7 +189,7 @@ metadata:
   namespace: {{ $.Values.namespace_name }}
   labels:
     app_name: {{ $.Values.app.name }}-{{ $sub_service_name }}
-    chart_name: {{ $.Chart.name }}
+    chart_name: {{ $.Chart.Name }}
     chart_version: {{ $.Chart.Version }} 
 spec:
   scaleTargetRef:
