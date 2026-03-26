@@ -15,7 +15,7 @@ service_list:
       PYTHONPATH: /app
       FLASK_APP: app:create_app
       SQLALCHEMY_DATABASE_URI: postgresql://customer:customer@db:5432/customer_mgmt
-      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      KAFKA_BOOTSTRAP_SERVERS: broker:9092
       LOG_LEVEL: INFO
     secrets:
       database_password: "supersecretpassword"
@@ -40,10 +40,9 @@ service_list:
       PYTHONPATH: /app
       FLASK_APP: app:create_app
       SQLALCHEMY_DATABASE_URI: postgresql://customer:customer@db:5432/customer_mgmt
-      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      KAFKA_BOOTSTRAP_SERVERS: broker:9092
       LOG_LEVEL: INFO
 
-# Simple Postgres db Pod + Service (matches docker-compose defaults).
 db:
   enabled: true
   image: postgres:16-alpine
@@ -52,9 +51,9 @@ db:
   postgresPassword: customer
   postgresDb: customer_mgmt
   persistence:
-    enabled: true
-    # Existing PVC to mount into the db Pod.
-    existingClaim: db-data
+    size: 1Gi
+    accessModes:
+      - ReadWriteOnce
     mountPath: /var/lib/postgresql/data
 
 kafka:
@@ -62,9 +61,9 @@ kafka:
   image: apache/kafka:4.1.2
   imagePullPolicy: IfNotPresent
   persistence:
-    enabled: true
-    # Existing PVC to mount as Kafka data dir.
-    existingClaim: kafka-data
+    size: 1Gi
+    accessModes:
+      - ReadWriteOnce
     mountPath: /var/lib/kafka/data
 
 kafkaUi:

@@ -1,3 +1,24 @@
+{{- $dbClaimName := dig "persistence" "name" "db-data" .Values.db }}
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ $dbClaimName | quote }}
+  namespace: {{ .Values.namespace_name }}
+  labels:
+    app.kubernetes.io/component: "db"
+spec:
+  accessModes:
+    {{- range (default (list "ReadWriteOnce") .Values.db.persistence.accessModes) }}
+    - {{ . | quote }}
+    {{- end }}
+  resources:
+    requests:
+      storage: {{ default "1Gi" .Values.db.persistence.size | quote }}
+  {{- if hasKey .Values.db.persistence "storageClassName" }}
+  storageClassName: {{ .Values.db.persistence.storageClassName | quote }}
+  {{- end }}
+
 ---
 apiVersion: v1
 kind: Pod
@@ -15,11 +36,9 @@ spec:
         - name: postgres
           containerPort: 5432
           protocol: TCP
-      {{- if (dig "persistence" "enabled" false .Values.db) }}
       volumeMounts:
         - name: db-data
           mountPath: {{ default "/var/lib/postgresql/data" .Values.db.persistence.mountPath | quote }}
-      {{- end }}
       env:
         - name: POSTGRES_USER
           value: {{ default "customer" .Values.db.postgresUser | quote }}
@@ -49,12 +68,10 @@ spec:
         timeoutSeconds: 5
         failureThreshold: 10
 
-  {{- if (dig "persistence" "enabled" false .Values.db) }}
   volumes:
     - name: db-data
       persistentVolumeClaim:
-        claimName: {{ default "db-data" .Values.db.persistence.existingClaim | quote }}
-  {{- end }}
+        claimName: {{ $dbClaimName | quote }}
 
 ---
 apiVersion: v1

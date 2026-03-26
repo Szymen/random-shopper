@@ -1,3 +1,24 @@
+{{- $kafkaClaimName := dig "persistence" "name" "kafka-data" .Values.kafka }}
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ $kafkaClaimName | quote }}
+  namespace: {{ .Values.namespace_name }}
+  labels:
+    app.kubernetes.io/component: "broker"
+spec:
+  accessModes:
+    {{- range (default (list "ReadWriteOnce") .Values.kafka.persistence.accessModes) }}
+    - {{ . | quote }}
+    {{- end }}
+  resources:
+    requests:
+      storage: {{ default "1Gi" .Values.kafka.persistence.size | quote }}
+  {{- if hasKey .Values.kafka.persistence "storageClassName" }}
+  storageClassName: {{ .Values.kafka.persistence.storageClassName | quote }}
+  {{- end }}
+
 ---
 apiVersion: v1
 kind: Pod
@@ -18,18 +39,16 @@ spec:
         - name: controller
           containerPort: 9093
           protocol: TCP
-      {{- if (dig "persistence" "enabled" false .Values.kafka) }}
       volumeMounts:
         - name: kafka-data
           mountPath: {{ default "/var/lib/kafka/data" .Values.kafka.persistence.mountPath | quote }}
-      {{- end }}
       env:
         - name: KAFKA_NODE_ID
           value: "1"
         - name: KAFKA_PROCESS_ROLES
           value: "broker,controller"
         - name: KAFKA_LISTENERS
-          value: "PLAINTEXT://broker:9092,CONTROLLER://localhost:9093"
+          value: "PLAINTEXT://:9092,CONTROLLER://localhost:9093"
         - name: KAFKA_ADVERTISED_LISTENERS
           value: "PLAINTEXT://broker:9092"
         - name: KAFKA_CONTROLLER_LISTENER_NAMES
@@ -48,33 +67,11 @@ spec:
           value: "0"
         - name: KAFKA_NUM_PARTITIONS
           value: "1"
-      readinessProbe:
-        exec:
-          command:
-            - /bin/sh
-            - -c
-            - /opt/kafka/bin/kafka-topics.sh --bootstrap-server broker:9092 --list
-        initialDelaySeconds: 15
-        periodSeconds: 5
-        timeoutSeconds: 10
-        failureThreshold: 10
-      livenessProbe:
-        exec:
-          command:
-            - /bin/sh
-            - -c
-            - /opt/kafka/bin/kafka-topics.sh --bootstrap-server broker:9092 --list
-        initialDelaySeconds: 15
-        periodSeconds: 5
-        timeoutSeconds: 10
-        failureThreshold: 10
 
-  {{- if (dig "persistence" "enabled" false .Values.kafka) }}
   volumes:
     - name: kafka-data
       persistentVolumeClaim:
-        claimName: {{ default "kafka-data" .Values.kafka.persistence.existingClaim | quote }}
-  {{- end }}
+        claimName: {{ $kafkaClaimName | quote }}
 
 ---
 apiVersion: v1
